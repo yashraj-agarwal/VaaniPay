@@ -8,7 +8,9 @@ from services.sarvam_tts import save_tts
 from mock_db import get_user, get_account
 from config import LANG_CONFIG
 from services.financial_ops import calculate_behavioral_score, perform_upi_transaction
+from services.ai_mentor import process_mentor_audio
 from dotenv import load_dotenv
+import threading
 
 load_dotenv()
 app = Flask(__name__)
@@ -26,6 +28,7 @@ BALANCE_TEMPLATE = {
 }
 
 CALL_STATE = {}
+MENTOR_RESULTS = {}  # call_sid -> audio filename, 'PROCESSING', or 'ERROR'
 
 def play(response, lang, prompt_name):
     audio_url = f"/audio/{lang}_{prompt_name}.wav"
@@ -215,8 +218,10 @@ def submit_main_menu():
     elif digit == '7': # PF / NPS
         play(resp, lang, 'auth_success') 
         resp.redirect('/prompt-main-menu')
+    elif digit == '8': # Financial Mentor Mode
+        resp.redirect('/mentor/start')
     else:
-        # Strict 1-9 check: if anything else (including 0, 8, 9), invalid and repeat
+        # Strict 1-9 check: if anything else (including 0, 9), invalid and repeat
         play(resp, lang, 'invalid')
         resp.redirect('/prompt-main-menu')
         
@@ -243,13 +248,24 @@ def submit_upi_recipient():
     print(f"👉 [USER INPUT] UPI Recipient: {recip}")
     
     state = CALL_STATE.get(call_sid, {})
-    state['recipient'] = recip
     lang = state.get('lang', 'en')
+    
+    # Hard validate: must be exactly 10 digits
+    if not recip or len(recip) != 10 or not recip.isdigit():
+        print(f"   [INVALID] Recipient '{recip}' is not a valid 10-digit number")
+        resp = VoiceResponse()
+        play(resp, lang, 'invalid')
+        resp.redirect('/prompt-upi-recipient')
+        return Response(str(resp), mimetype='text/xml')
+    
+    # Save the recipient regardless
+    state['recipient'] = recip
     CALL_STATE[call_sid] = state
     
     resp = VoiceResponse()
-    recip_user = get_user(recip)
     
+    # OPTIONAL: If they are a registered VaaniPay user, speak their name
+    recip_user = get_user(recip)
     if recip_user:
         name = recip_user.get('name', 'User')
         text = f"Sending money to {name}."
@@ -261,13 +277,13 @@ def submit_upi_recipient():
         try:
             if save_tts(text, lang, audio_path):
                 resp.play(f"/audio/{audio_filename}")
-        except:
-            pass # Silent fail: just proceed to amount
-        resp.redirect('/prompt-upi-amount')
+        except Exception as e:
+            print(f"   TTS failed: {e}")
     else:
-        play(resp, lang, 'invalid')
-        resp.redirect('/prompt-upi-recipient')
-        
+        # Non-registered user — still valid, just proceed silently
+        print(f"   Recipient {recip} is not a VaaniPay user — proceeding to amount")
+    
+    resp.redirect('/prompt-upi-amount')
     return Response(str(resp), mimetype='text/xml')
 
 @app.route('/prompt-upi-amount', methods=['GET', 'POST'])
@@ -440,6 +456,201 @@ def redirect_to_prompt(route):
     resp = VoiceResponse()
     resp.redirect(route)
     return Response(str(resp), mimetype='text/xml')
+
+# ================== FINANCIAL MENTOR MODE ==================
+
+@app.route('/mentor/start', methods=['GET', 'POST'])
+def mentor_start():
+    call_sid = request.values.get('CallSid')
+    state = CALL_STATE.get(call_sid, {})
+    lang = state.get('lang', 'en')
+
+    # Enrich session with user's financial data for LLM context
+    user = state.get('user', {})
+    acc = get_account(user.get('account_id', ''))
+    _, factors = calculate_behavioral_score(state.get('phone', ''))
+    score = factors  # reuse score
+    state['balance'] = acc.get('balance', 0)
+    state['credit_score'] = 650  # mock default
+    CALL_STATE[call_sid] = state
+
+    print(f"\n=== AI FINANCIAL MENTOR STARTED (lang={lang}) ===")
+    resp = VoiceResponse()
+
+    # Generate intro in selected language
+    intro_texts = {
+        'en': 'Welcome to VaaniPay Financial Mentor. Ask me any financial question after the beep.',
+        'hi': 'VaaniPay Financial Mentor mein aapka swagat hai. Beep ke baad apna sawaal poochein.',
+        'ta': 'VaaniPay Financial Mentor-il ungalai varuverpagiren. Beep-ku piragu ungal kelvi kelunga.',
+        'te': 'VaaniPay Financial Mentor lo swaagatam. Beep taravata mee prashna adugandi.',
+        'kn': 'VaaniPay Financial Mentor ge swagatha. Beep nantara nimma prashne keeli.',
+        'ml': 'VaaniPay Financial Mentor il swagatham. Beep-inu sesham ninagal chodyam chodyikku.',
+        'mr': 'VaaniPay Financial Mentor madhye swagat. Beep nantar tumcha prashna vicharaa.',
+        'bn': 'VaaniPay Financial Mentor e swagato. Beep er pore apanar proshno jiggesh korun.',
+        'gu': 'VaaniPay Financial Mentor ma swagat chhe. Beep pachhi tamaro prashna poochho.',
+    }
+    intro_text = intro_texts.get(lang, intro_texts['en'])
+    intro_file = f"dynamic_audio/mentor_intro_{call_sid}.wav"
+    try:
+        save_tts(intro_text, lang, Path(intro_file))
+        resp.play(f'/dynamic-audio/mentor_intro_{call_sid}.wav')
+    except:
+        pass  # fallback to silent start
+
+    resp.redirect('/mentor/listen')
+    return Response(str(resp), mimetype='text/xml')
+
+
+@app.route('/mentor/listen', methods=['GET', 'POST'])
+def mentor_listen():
+    """Prompt user to speak and start recording."""
+    call_sid = request.values.get('CallSid')
+    state = CALL_STATE.get(call_sid, {})
+    lang = state.get('lang', 'en')
+
+    resp = VoiceResponse()
+
+    # Brief beep via Say (Twilio built-in) then record
+    resp.say(".")
+    resp.record(
+        action='/mentor/process',
+        method='POST',
+        max_length=30,
+        finish_on_key='#',
+        play_beep=True,
+        timeout=5,
+    )
+    # If no speech recorded, loop back
+    resp.redirect('/mentor/listen')
+    return Response(str(resp), mimetype='text/xml')
+
+
+@app.route('/mentor/process', methods=['GET', 'POST'])
+def mentor_process():
+    """Receive Twilio recording. Immediately start background thread and return a pause."""
+    call_sid = request.values.get('CallSid')
+    recording_url = request.values.get('RecordingUrl', '')
+    recording_duration = int(request.values.get('RecordingDuration', 0))
+    print(f"\n   [MENTOR] Recording received. Duration={recording_duration}s")
+
+    state = CALL_STATE.get(call_sid, {})
+    resp = VoiceResponse()
+
+    if recording_duration < 1:
+        print("   [MENTOR] Recording too short — looping back")
+        resp.redirect('/mentor/listen')
+        return Response(str(resp), mimetype='text/xml')
+
+    # Mark as processing
+    MENTOR_RESULTS[call_sid] = 'PROCESSING'
+
+    # Kick off background thread immediately — don't block Twilio
+    def _bg_process():
+        print(f"   [MENTOR-THREAD] Starting pipeline for {call_sid}")
+        result = process_mentor_audio(recording_url, call_sid, state)
+        MENTOR_RESULTS[call_sid] = result if result else 'ERROR'
+        print(f"   [MENTOR-THREAD] Done. Result={MENTOR_RESULTS[call_sid]}")
+
+    thread = threading.Thread(target=_bg_process, daemon=True)
+    thread.start()
+
+    # Return immediately — pause for 8s then poll for result
+    resp.pause(length=8)
+    resp.redirect('/mentor/check-result')
+    return Response(str(resp), mimetype='text/xml')
+
+
+@app.route('/mentor/check-result', methods=['GET', 'POST'])
+def mentor_check_result():
+    """Poll for background processing result. Loop with short pauses until done."""
+    call_sid = request.values.get('CallSid')
+    state = CALL_STATE.get(call_sid, {})
+    lang = state.get('lang', 'en')
+    result = MENTOR_RESULTS.get(call_sid, 'ERROR')
+
+    resp = VoiceResponse()
+    if result == 'PROCESSING':
+        # Still working — wait 3 more seconds and check again
+        print(f"   [MENTOR] Still processing for {call_sid}... waiting 3s more")
+        resp.pause(length=3)
+        resp.redirect('/mentor/check-result')
+    elif result != 'ERROR' and result:
+        # Done! Redirect to respond with the audio filename
+        print(f"   [MENTOR] Result ready: {result}")
+        resp.redirect(f'/mentor/respond?audio={result}')
+    else:
+        # Something failed — play error in language
+        error_texts = {
+            'en': 'Sorry, I did not understand. Please speak again.',
+            'hi': 'Maafi chahta hoon, samajh nahi aaya. Kripya phir se bolein.',
+            'ta': 'Mannikavum, puriyavillai. Meedum paesunga.',
+            'te': 'Nenu artham chesukoledu. Malli cheppandi.',
+            'kn': 'Kshamissi, artha aagalilla. Matte heli.',
+            'ml': 'Manasilaayilla. Onnu koodi parayan.',
+            'mr': 'Samajale nahi. Parat sanga.',
+            'bn': 'Bujhte parini. Abar bolun.',
+            'gu': 'Samajhyu nahi. Pharthi bolo.',
+        }
+        resp.say(error_texts.get(lang, error_texts['en']))
+        resp.redirect('/mentor/listen')
+
+    return Response(str(resp), mimetype='text/xml')
+
+
+@app.route('/mentor/respond', methods=['GET', 'POST'])
+def mentor_respond():
+    """Play AI response, then loop back for next question."""
+    call_sid = request.values.get('CallSid')
+    audio_filename = request.values.get('audio', '')
+    state = CALL_STATE.get(call_sid, {})
+    lang = state.get('lang', 'en')
+
+    resp = VoiceResponse()
+
+    # Play the AI generated response
+    if audio_filename:
+        resp.play(f'/dynamic-audio/{audio_filename}')
+
+    # Prompt for next question
+    followup_texts = {
+        'en': 'You can ask another question, or press star to return to the main menu.',
+        'hi': 'Aap aur sawaal pooch sakte hain, ya star dabakar main menu mein wapas ja sakte hain.',
+        'ta': 'Vera kelvi keelungal, illatha star aruththa main menu-ku tirumbunga.',
+        'te': 'Meru minka prashna adugavaccham, leda star noccite main menu ki tirigi vastam.',
+        'kn': 'Inka prashne keeyabahudhu, athava star odisi main menu ge hodha.',
+        'ml': 'Merre chodyam chodyikkam, athava star arakkam main menu il maadam.',
+        'mr': 'Tumhi aankhi prashna vicharaar, kinva star daabaa ani main menu la parat ya.',
+        'bn': 'Ar proshno korte paren, ba star chhapa main menu te phire jan.',
+        'gu': 'Bijo prashn pu chhho, athwa star dabavine main menu par pachi jao.',
+    }
+    followup_text = followup_texts.get(lang, followup_texts['en'])
+    followup_file = f"dynamic_audio/mentor_followup_{call_sid}.wav"
+    try:
+        save_tts(followup_text, lang, Path(followup_file))
+        resp.play(f'/dynamic-audio/mentor_followup_{call_sid}.wav')
+    except:
+        resp.say(followup_text)
+
+    # Record the next question — pressing * goes back to main menu
+    resp.record(
+        action='/mentor/process',
+        method='POST',
+        max_length=30,
+        finish_on_key='*',
+        play_beep=True,
+        timeout=5,
+    )
+    # * pressed => back to main menu
+    resp.redirect('/prompt-main-menu')
+    return Response(str(resp), mimetype='text/xml')
+
+
+@app.route('/dynamic-audio/<filename>')
+def serve_dynamic_audio(filename):
+    """Serve dynamically generated mentor audio files."""
+    return send_from_directory('dynamic_audio', filename)
+
+# ===========================================================
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

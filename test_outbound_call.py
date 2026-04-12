@@ -13,7 +13,7 @@ ngrok_url = os.getenv('SERVER_BASE_URL')
 client = Client(account_sid, auth_token)
 
 # The Indian number you want Twilio to call (must be your Verified Caller ID phone number)
-YOUR_INDIAN_NUMBER = "+917305517727"  # <--- REPLACE THIS
+YOUR_INDIAN_NUMBER = "+919954209026"  # <--- REPLACE THIS
 
 print(f"Calling {YOUR_INDIAN_NUMBER} from {twilio_number}...")
 

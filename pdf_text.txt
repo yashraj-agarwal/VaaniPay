@@ -1,0 +1,183 @@
+VaaniPay 
+Voice-First IVR Financial Inclusion Platform 
+ACM Challenge Week — Hackathon 1.0  |  Problem Statement 3: FinTech for Financial Inclusion 
+Team Information 
+Team Name: Team VaaniPay 
+GitHub Repository: https://github.com/kisnaXD/acm-manipal-vaanipay 
+Team Leader:  
+Krishna Gera  |  Reg. No. 240905282 
+Team Members:  
+Saanvi Bansal | Reg. No. 240953564 
+Nishaanth S. | Reg. No. 240905422 
+Yashraj Agarwal | Reg. No. 240905558 
+ 
+Problem Statement 
+PS 3: FinTech for Financial Inclusion: While digital payment systems have grown rapidly, a 
+large section of the population — including gig workers, small business owners, and rural 
+communities — still lacks access to credit, financial planning tools, and protection against 
+fraud. The challenge is to develop a solution that leverages technology to make financial 
+services more accessible, secure, and inclusive, addressing the needs of underserved 
+populations. 
+Ideation 
+More than 300M Indians have no access to digital financial services, not for want of need, but 
+for lack of any solution that doesn’t presuppose use of a smartphone, internet, and literacy in 
+English. For the hundreds of millions of Indians who use only a basic feature phone or 
+landline to communicate-gig workers, daily laborers, small farmers, rural women-whose 
+financial life is conducted entirely in cash, with zero security in terms of savings, constant 
+exposure to moneylenders, and permanent exclusion from credit, there is not one mainstream 
+financial application. UPI is already the future of payments in urban India, but the 250M 
+Indians who will never be able to afford, or will lack reason to use, a smartphone, have no 
+access to a single app. 
+VaaniPay is founded on one simple insight: do not ask the underserved Indians to update the 
+infrastructure they use, bring financial services to the infrastructure they already have. A 
+telephone. Any telephone. Using IVR technology, integrated with purpose-built Indian 
+language speech models from Sarvam AI, and built on the NPCI's already extant USSD-UPI 
+rails, VaaniPay allows anyone with a telephone to dial one number, speak naturally in their 
+own language, and access payments, credit, insurance and savings entirely through voice-no 
+smartphone, no internet, no literacy required. 
+The NPCI's *99# USSD service has already demonstrated the regulatory and technical 
+feasibility of using a universal code (a phone number) for banking, however its current, keypad driven interface only supports nine languages, and it includes no support for savings, 
+insurance or credit. 
+ 
+ 
+Figure 1: Scale of financial exclusion in India: the problem VaaniPay addresses 
+Implementation 
+When the user dials the VaaniPay number, the call is received by the IVR engine that is 
+powered by Twilio or Asterisk. There is no data plan needed on the caller’s phone-the call 
+proceeds over the normal PSTN or GSM line. The system automatically detects the user’s 
+language from the first spoken phrase by the user, or gives a short language choice if none are 
+detected. The entire audio is streamed to Sarvam AI’s STT pipeline, which performs 
+transcription with a word error rate under 12% on the lossy, 8KHz telephony audio. 
+The transcribed text is then fed to a custom NLP intent parser which is fine-tuned for 
+vocabulary around financial domains across Indic languages. This determines one of the 
+many intents (payment, balance inquiry, loan application, insurance purchase, credit score 
+check, savings deposit etc.) as well as the entities for that intent (amount, recipient, account 
+etc.) for the request. Authentication: Before the banking orchestrator attempts to process the 
+transaction request downstream, it uses the registered voice print along with a spoken 4-digit 
+mPIN in order to verify the identity of the caller. 
+The banking orchestrator routes the validated request to the corresponding downstream 
+systems (NPCI USSD bridge for UPI payments, NBFC partner APIs for loans, InsurTech 
+partner integrations for insurance). After the transaction is confirmed, the response is then 
+converted into natural speech using Sarvam AI's TTS engine for the specific user's language, 
+and played back over the call. The entire experience from dial to confirmation for a UPI 
+payment takes under 50 seconds. 
+ 
+Figure 2: VaaniPay system architecture: five-layer design from telephony to financial services 
+ 
+ 
+Figure 3: IVR call flow for a UPI payment transaction 
+Key Features 
+VaaniPay handles all UPI transactions via voice - user speaks the beneficiary's name or 
+number and the amount and transaction is executed without any need of any button press or 
+keypad. User can inquire about balance, mini statements and transfer money via voice 
+commands only. The platform supports fully voice-driven applications for micro loans 
+between 500 to 25,000 (with instant decisions taken based on the user's in-app behavioral 
+credit score). It also supports fully voice-activated daily health insurance, accident insurance, 
+crop insurance, recurring deposit, fixed deposit and allows users to deposit funds via voice. 
+The user can also get their EPF/NPS balance from EPFO/PFRDA via respective API 
+integration. 
+Most unique part is the in-app behavioral credit scoring mechanism to serve the 'New to 
+Credit' (NTC) customers who have never had a formal credit history. Score is derived based 
+on five categories of signals - consistency of transactions, timely repayment of previous 
+micro loans, savings consistency, level of platform usage and strength of referral network. 
+Score is calculated on the standard 300-900 credit scoring scale (used by Indian credit 
+bureaus). And interestingly, when a user inquires about their credit score, VaaniPay reads out 
+the most significant factors contributing to the score back to the user, making the user aware 
+of how to improve their credit score as well as grant credit access to them. Loans are 
+sanctioned and interest rate is regulated and depends on credit score (for score >650 they can 
+avail higher loan amount and lower interest rates). 
+ 
+Figure 4: Behavioral credit scoring — weightage of five signal categories 
+ 
+Table I: VaaniPay Service Portfolio 
+Service Description Infrastructure Target User 
+UPI Payment Send/receive money by 
+speaking name or number NPCI *99# USSD Bridge All users 
+Micro-Loan ₹500–₹25,000 instant loans via 
+voice NBFC partner APIs Gig workers, farmers 
+Micro-Insurance Health, accident & crop 
+coverage by voice Digit / Acko APIs Rural households 
+Credit Score Behavioral score from in-
+platform history Proprietary scoring engine New-to-credit users 
+FD / Savings Open fixed/recurring deposits 
+by voice Small Finance Bank APIs Low-income savers 
+PF / NPS Check EPF and NPS balance 
+via voice EPFO / PFRDA APIs Formal sector workers 
+Tech Stack 
+Speech intelligence layer: The STT and TTS for all 22 Indian languages were completely 
+built in-house at Sarvam AI specifically for Indic speech and not an adapted version of 
+models that have been fine tuned on English data. As a result they perform significantly 
+better in telephony settings. IVR and telephony layer: The solution uses either Twilio or 
+Asterisk (depending on the deployment requirements of cloud vs. On-prem) for PSTN and 
+GSM call routing where the internet is not required for the caller's phone. 
+Backend layer: Built on Node.js and Python micro services. NLP intent parser: Custom 
+model fine tuned on Indic languages with a finance lexicon. Data storage: User profiles, 
+transaction data, behavioral credit data are stored in PostgreSQL. User session is stored in 
+Redis to maintain state through multi-turn voice interactions within a call. Payment 
+execution: Payments are executed through the NPCI *99# USSD bridge. Loan disbursal is 
+achieved via NBFC partner APIs. Insurance offerings can be integrated with InsurTech 
+partners licensed by IRDAI like Digit, Acko. 
+ 
+ 
+Figure 5: Native speaker population for each of the 22 scheduled languages supported by VaaniPay  
+ 
+Table II: Technology Stack 
+Layer Technology Purpose 
+Speech AI Sarvam AI STT + TTS Speech recognition and synthesis across 22 
+Indic languages 
+Telephony Twilio / Asterisk IVR engine, PSTN/GSM call routing, DTMF 
+fallback 
+Intent Parsing Custom NLP model Financial intent classification and entity 
+extraction 
+Authentication Voice biometrics + mPIN Multi-factor identity verification per call 
+Backend Node.js + Python microservices Banking orchestration, session and state 
+management 
+Database PostgreSQL + Redis Persistent user data and in-call session state 
+Payments NPCI *99# USSD Bridge UPI transaction execution over feature phone 
+networks 
+Finance APIs NBFC + InsurTech + EPFO Loan disbursement, insurance products, 
+PF/NPS enquiry 
+Feasibility 
+The technology stack has been validated, with Sarvam AI's models performing at production-
+level accuracy under telephony circumstances and NPCI's *99# system processingmillions of 
+USSD transactions per day. The regulatory framework is also in place-USSD based UPI is 
+already being implemented under RBI regulations from 2014, voice-based KYC is in place 
+from 2020 (V-CIP by RBI), micro-lending to NBFC partners is under current frameworks, 
+and micro-insurance with IRDAI licensed partners is already a model (e.g. PMJBY/PMSBY). 
+Commercially, VaaniPay is viable, without any need for grants and subsidies. Revenue is 
+generated via transaction fees of 0.5%-1% on the payments, and loan origination fees on 
+loans distributed via NBFC partners. B2B licensing of the voice banking API to NBFCs, 
+banks and NGOs to act as a white-labeled voice banking platform will provide enterprise 
+revenue to the business in addition to consumer revenue streams. The existing partnership 
+with the government via Jan Dhan Yojana and PM Fasal Bima provides a ready distribution 
+pipeline into the exact segment for whom VaaniPay was built. 
+Table III: VaaniPay vs. Existing Solutions 
+Feature GPay / PhonePe NPCI *99# M-Pesa 
+(Kenya) VaaniPay 
+Smartphone required Yes No No No 
+Internet required Yes No No No 
+Voice / NLP interface No No No Yes 
+Languages supported 8–10 9 1 22 
+Micro-loans No No Limited Yes 
+Micro-insurance Limited No No Yes 
+Credit score building No No Limited Yes 
+Literacy requirement High Medium Low None 
+Impact 
+VaaniPay's immediate outcome is access – 250 million feature phone owners given first 
+formal digital finance journey. The second and more significant outcome is structural. Each 
+transaction creates a behavioral credit profile, that in 90 days, for a day-wage earner with no 
+existing credit score, qualifies them for a micro-loan at a regulation rate-saving them from 
+24-60% annually from lenders-and for each activated micro-insurance, a farmer or domestic 
+worker has protection against the health and accident shocks that could erase 6 months of 
+saving. 
+ Women in rural communities are the primary users, excluded by default in smartphone 
+dominated digital finance. A zero-literacy, zero-smartphone, native-language interface drops 
+every wall that's excluded them traditionally from finance. In scale, VaaniPay doesn't merely 
+serve unbanked India; it formally includes them-Users with a credit history from VaaniPay 
+are ready for mainstream banks products, the platform acts as a floor, not a ceiling. 
+ 
+There are 1.15 Billion phone subscribers in India. Every one of those is in VaaniPay's 
+addressable market. The architecture scales seamlessly to Bangladesh, Nepal, and Sri Lanka 
+upon expansion of Sarvam Language Models, and is replicable in any emerging market that 
+exhibits feature phone dominance. The problem VaaniPay is addressing is not India's unique 
+problem, it is the developing world's dominant financial inclusion problem. 

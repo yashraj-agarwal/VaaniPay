@@ -1,0 +1,9 @@
+{
+  "ACC1": [
+    {
+      "type": "debit",
+      "amount": 200.0,
+      "desc": "UPI Payment"
+    }
+  ]
+}

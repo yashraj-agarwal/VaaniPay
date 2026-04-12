@@ -1,10 +1,37 @@
 # Claude Code
 .claude/
 
-# Environment — never commit secrets
+# =============================================
+# SECRETS — never commit these
+# =============================================
 .env
+.env.*
+!.env.example
 
-# Python
+# =============================================
+# USER DATA — personally identifiable info
+# =============================================
+data/users.json
+data/accounts.json
+data/transactions.json
+
+# =============================================
+# PATCH / UTILITY SCRIPTS — messy, not for repo
+# =============================================
+patch_app.py
+patch_balance.py
+patch_followup.py
+setup_backend.py
+pdf_text.txt
+
+# =============================================
+# DYNAMIC AUDIO — generated at runtime per call
+# =============================================
+prompt_audio/dyn_*.wav
+
+# =============================================
+# PYTHON
+# =============================================
 __pycache__/
 *.py[cod]
 *.pyo
@@ -17,12 +44,16 @@ venv/
 .venv/
 env/
 
-# Runtime files
+# =============================================
+# RUNTIME FILES
+# =============================================
 last_result.json
 last_summary.txt
 summary_audio.mp3
 
+# =============================================
 # OS
+# =============================================
 .DS_Store
 Thumbs.db
 desktop.ini

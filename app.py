@@ -49,9 +49,7 @@ def handle_incoming():
 @app.route('/prompt-lang', methods=['GET', 'POST'])
 def prompt_lang():
     resp = VoiceResponse()
-    # num_digits=1: stop IMMEDIATELY after exactly 1 keypress
-    # timeout=8: wait 8 seconds max, then repeat via redirect
-    # finishOnKey='': don't let '#' or '*' end early — enforce exactly 1 DTMF tone
+    # PART 1: ONE universal file plays for everyone — contains all 9 language prompts
     gather = Gather(
         num_digits=1,
         action='/submit-lang',
@@ -59,7 +57,7 @@ def prompt_lang():
         timeout=8,
         finish_on_key=''
     )
-    play(gather, 'en', 'lang_menu')
+    gather.play('/audio/universal_language_menu.wav')
     resp.append(gather)
     resp.redirect('/prompt-lang')  # Silently loop if no input
     return Response(str(resp), mimetype='text/xml')
@@ -205,23 +203,26 @@ def submit_main_menu():
     elif digit == '4': # Insurance
         resp.redirect('/prompt-insurance')
     elif digit == '5': # Credit Score
-        print("\\n=== 🧠 CALCULATING BEHAVIORAL CREDIT SCORE ===")
+        print("\n=== 🧠 CALCULATING BEHAVIORAL CREDIT SCORE ===")
         score, factors = calculate_behavioral_score(user.get('phone', '9876543210'))
         print(f"👉 Generated Score: {score}/900")
         print(f"👉 Key Factors: {', '.join(factors)}")
-        print("==============================================\\n")
-        play(resp, lang, 'auth_success') 
-        play(resp, lang, 'loan_approved') 
+        print("==============================================\n")
+        
+        # PART 2: ANNOUNCE CREDIT SCORE AFTER CALCULATION
+        credit_text = f"Your credit score is {score}."
+        resp.say(credit_text)
         resp.redirect('/prompt-main-menu')
+
     elif digit == '6': # Savings
         resp.redirect('/prompt-savings-amount')
-    elif digit == '7': # PF / NPS
-        play(resp, lang, 'auth_success') 
-        resp.redirect('/prompt-main-menu')
+
     elif digit == '8': # Financial Mentor Mode
         resp.redirect('/mentor/start')
+
     else:
-        # Strict 1-9 check: if anything else (including 0, 9), invalid and repeat
+        # PART 3: REMOVE PF / NPS COMPLETELY
+        # Updated digit handling to 1-6 and 8.
         play(resp, lang, 'invalid')
         resp.redirect('/prompt-main-menu')
         
@@ -370,7 +371,15 @@ def prompt_loan_amount():
     call_sid = request.values.get('CallSid')
     lang = CALL_STATE.get(call_sid, {}).get('lang', 'en')
     resp = VoiceResponse()
-    gather = Gather(num_digits=4, action='/submit-loan', method='POST', timeout=10)
+    
+    # PART 1: FIX LOAN AMOUNT — REQUIRE #
+    gather = Gather(
+        input="dtmf",
+        finish_on_key="#",
+        timeout=15,
+        method="POST",
+        action="/submit-loan"
+    )
     play(gather, lang, 'loan_ask_amount')
     resp.append(gather)
     resp.redirect('/prompt-loan-amount')

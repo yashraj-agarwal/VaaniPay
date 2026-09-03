@@ -83,15 +83,15 @@ This takes 3–5 minutes. Progress is shown line by line. If any fail, just re-r
 
 Once done, you'll have a `prompt_audio/` folder with files like `hi_main_menu.wav`, `en_enter_phone.wav`, etc.
 
-### 7. Start the Flask server
+### 7. Start the FastAPI server
 
 ```
-python app.py
+uvicorn main:app --host 0.0.0.0 --port 5000
 ```
 
 You should see:
 ```
-* Running on http://0.0.0.0:5000
+INFO:     Uvicorn running on http://0.0.0.0:5000 (Press CTRL+C to quit)
 ```
 
 Leave this terminal open.
@@ -100,7 +100,7 @@ Leave this terminal open.
 
 Download ngrok from **ngrok.com/download** → Windows → extract the `.exe`.
 
-In a **new terminal** (keep Flask running in the first one):
+In a **new terminal** (keep FastAPI running in the first one):
 ```
 ngrok http 5000
 ```
@@ -175,7 +175,7 @@ Dial VaaniPay number
 
 ```
 vaanipay/
-├── app.py                  ← Flask server (all Twilio webhook routes)
+├── main.py                 ← FastAPI server (all Twilio webhook routes)
 ├── config.py               ← Language config (9 langs, DTMF mapping)
 ├── mock_db.py              ← Read/write helpers for JSON data files
 ├── download_audios.py      ← Script to generate all audio prompts via Sarvam TTS
@@ -217,7 +217,7 @@ vaanipay/
 → Check that `prompt_audio/` exists and has `.wav` files. Run `python download_audios.py` if empty.
 
 **"Twilio says webhook failed"**
-→ Make sure Flask is running (`python app.py`) and ngrok is running in a separate terminal. Check the ngrok URL matches what's in Twilio.
+→ Make sure FastAPI is running (`uvicorn main:app --host 0.0.0.0 --port 5000`) and ngrok is running in a separate terminal. Check the ngrok URL matches what's in Twilio.
 
 **"download_audios.py fails with 400 error"**
 → Your `SARVAM_API_KEY` in `.env` may be wrong. Verify at api.sarvam.ai.

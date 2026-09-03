@@ -1,4 +1,7 @@
-flask
+fastapi
+uvicorn
+passlib[bcrypt]
+python-multipart
 twilio
 requests
 python-dotenv

@@ -28,6 +28,7 @@ pdf_text.txt
 # DYNAMIC AUDIO — generated at runtime per call
 # =============================================
 prompt_audio/dyn_*.wav
+dynamic_audio/
 
 # =============================================
 # PYTHON
